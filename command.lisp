@@ -541,11 +541,20 @@ know lisp very well. One might put the following in one's rc file:
   (loop for i in commands do
         (eval-command i)))
 
+(defmacro with-command-completion (prompt initial-input cmd &body body)
+  "Prompt user with @var{prompt}, bind the command name into @{cmd}
+check for errors, commands existence then evaluate @{body}."
+  `(let ((cmd (completing-read (current-screen) ,prompt 
+                               (all-commands) :initial-input (or initial-input ""))))
+     (unless ,cmd
+       (throw 'error :abort))
+     (when (and (plusp (length ,cmd))
+	(if (not (get-command-structure cmd))
+	    (throw 'error (format nil "Command '~a' not found." cmd))
+	  ,@body)))))
+
 (defcommand colon (&optional initial-input) (:rest)
   "Read a command from the user. @var{initial-text} is optional. When
-supplied, the text will appear in the prompt."
-  (let ((cmd (completing-read (current-screen) ": " (all-commands) :initial-input (or initial-input ""))))
-    (unless cmd
-      (throw 'error :abort))
-    (when (plusp (length cmd))
-      (eval-command cmd t))))
+ supplied, the text will appear in the prompt."
+  (with-command-completion ": " initial-input cmd
+			   (eval-command cmd t)))

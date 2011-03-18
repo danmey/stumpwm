@@ -108,15 +108,16 @@ command prints the command bound to the specified key sequence."
            (message-no-timeout "\"~a\" is an alias for the command \"~a\":~%~a" (command-alias-from deref) (command-name struct)
                                (documentation (command-name struct) 'function))))))
 
-(defcommand where-is (cmd) ((:rest "Where is command: "))
-"Print the key sequences bound to the specified command."
-(let ((bindings (loop for map in (top-maps) append (search-kmap cmd map))))
-  (if bindings
-      (message-no-timeout "\"~a\" is on ~{~a~^, ~}"
-                      cmd
-                      (mapcar 'print-key-seq bindings))
-      (message-no-timeout "Command \"~a\" is not currently bound"
-                      cmd))))
+(defcommand where-is (&optional initial-input) (:rest)
+  "Print the key sequences bound to the specified command."
+  (with-command-completion "Where is command: " initial-input cmd
+   (let ((bindings (loop for map in (top-maps) append (search-kmap cmd map))))
+     (if bindings
+         (message-no-timeout "\"~a\" is on ~{~a~^, ~}"
+                             cmd
+                             (mapcar 'print-key-seq bindings))
+       (message-no-timeout "Command \"~a\" is not currently bound"
+                           cmd)))))
 
 (defcommand modifiers () ()
   "List the modifiers stumpwm recognizes and what MOD-X it thinks they're on."
