@@ -38,6 +38,7 @@
 
 ;;; CODE:
 
+
 (defpackage :stumpwm.contrib.pwsafe
   (:use :common-lisp :stumpwm))
 
