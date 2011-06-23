@@ -32,7 +32,8 @@
 ;;; BUGS:
 ;;;
 ;;; Not very safe since the master password is not only stored in memory 
-;;; but also echoed through unix pipe. You've been warned.
+;;; but also echoed through unix pipe. 
+;;; You've been warned.
 ;;; If anybody knows how to improve just mail me.
 
 ;;; CODE:
@@ -42,11 +43,15 @@
 
 (in-package :stumpwm.contrib.pwsafe)
 
-
-(defstruct pwsafe-entry password name user-name)
+(defstruct pwsafe-entry
+  "Our structure holding entry data. Master password stored for each
+entry therefore VERY UNSAFE."
+  password 
+  name 
+  user-name)
 
 (defun lines-from-string (string)
-  "Boiler plate for splitting string buffer to lines.  Rewritten
+  "Boiler plate for splitting STRING buffer to lines.  Rewritten
 thousands of times already"
   (loop for i = 0 then (1+ j)
         as j = (position #\Newline string :start i)
@@ -54,12 +59,12 @@ thousands of times already"
         while j))
 
 (defun pair-split (entry separator)
-  "Split two sections into pair"
+  "Split two ENTRY sections separated by SEPARATOR into pair"
   (let ((lst (cl-ppcre:split separator entry)))
     (cons (remove #\Newline (car lst)) (remove #\Newline (cadr lst)))))
 
 (defun command-options (options &optional argument) 
-  "Create command options with optional arguments.  BUGS: Need to
+  "Create command OPTIONS with optional ARGUMENTS.  BUGS: Need to
 insert space after each switch, should interleave space."
   (format nil "~a ~a" 
           (if (listp options) 
@@ -67,22 +72,23 @@ insert space after each switch, should interleave space."
           (or argument "") t))
 
 (defun pwsafe-command (password options &optional argument) 
-  "Command that will be run. Not safe."
+  "Execute pwsafe command using master PASSWORD with OPTIONS and
+additional ARGUMENT. Not safe."
   (format nil "echo \"~a\" | pwsafe ~a" password (command-options options argument)))
 
 (defun with-xsel (command &optional options)
-  "Pipe it to xsel."
+  "Pipe COMMAND with OPTIONS to xsel."
   (format nil "~a | xsel ~a" command (or options "")))
 
 (defun pwsafe-entry-from-line (password line) 
-  "Create entry from line and master password. Not safe."
+  "Create entry from LINE and master PASSWORD. Not safe."
   (let ((pair (pair-split line "  -  ")))
     (make-pwsafe-entry :password password 
                        :name (car pair)
                        :user-name (cdr pair))))
          
 (defun pwsafe-entries (password)
-  "Get all the entries using master password and spawning pwsafe
+  "Get all the entries using master PASSWORD and spawning pwsafe
 command"
   (let ((output (run-shell-command (pwsafe-command password '("-l")) t)))
          (mapcar 
@@ -90,22 +96,27 @@ command"
           (lines-from-string output))))
 
 (defun assoc-entries (entries)
-  "Create assoc from entries keyed by the name"
+  "Create assoc from ENTRIES keyed by the name"
   (mapcar (lambda (entry) (cons (pwsafe-entry-name entry) entry)) entries))
 
 (defun pwsafe-password-to-clipboard (entry)
-  "Main function that will perform side action with all the associated
-side effects like priting message and putting password into
+  "Main function that will perform side action on ENTRY with all the
+associated side effects like priting message and putting password into
 xclipboard"
   (let* ((pwsafe-entry (pwsafe-entry-name entry))
-         (output (run-shell-command (pwsafe-command (pwsafe-entry-password entry) '("-q " "-p " "--echo " "-E ") pwsafe-entry) t))
+         (output 
+          (run-shell-command 
+           (pwsafe-command (pwsafe-entry-password entry) 
+                           '("-q " "-p " "--echo " "-E ") pwsafe-entry) t))
          (entry-password (cdr (pair-split output "passphrase for.*: "))))
     (set-x-selection entry-password)
     (run-shell-command (with-xsel (format nil "echo \"~a\"" entry-password) "-ib") t)
-    (message (format nil "Username: ~a (password copied to clipboard)" (pwsafe-entry-user-name entry)))))
+    (message 
+     (format nil "Username: ~a (password copied to clipboard)" 
+             (pwsafe-entry-user-name entry)))))
 
 (defcommand pwsafe-menu (password) ((:password "Pwsafe password: "))
-  "Prompt for password. Show menu with pwsafe database entries. Let
+  "Prompt for PASSWORD. Show menu with pwsafe database entries. Let
 the user choose entry, put password to clipboard and notify user about
 associated username"
   (let* ((entries (pwsafe-entries password))
@@ -126,6 +137,6 @@ associated username"
              
 
 (defcommand pwsafe (entry) ((:pwsafe-entry "Pwsafe entry: "))
-  "Prompt for entry with completion, put password in clipboard and
+  "Prompt for ENTRY with completion, put password in clipboard and
 notify user about associated username"
   (pwsafe-password-to-clipboard entry))
