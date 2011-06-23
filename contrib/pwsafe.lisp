@@ -39,7 +39,7 @@
 ;;; CODE:
 
 (defpackage :stumpwm.contrib.pwsafe
-  (:use :common-lisp :stumpwm)))
+  (:use :common-lisp :stumpwm))
 
 (in-package :stumpwm.contrib.pwsafe)
 
@@ -136,7 +136,7 @@ associated username"
         (cdr (assoc entry-name entries-assoc :test #'equal)))))
              
 
-(defcommand pwsafe (entry) ((:pwsafe-entry "Pwsafe entry: "))
+(defcommand pwsafe-entry (entry) ((:pwsafe-entry "Pwsafe entry: "))
   "Prompt for ENTRY with completion, put password in clipboard and
 notify user about associated username"
   (pwsafe-password-to-clipboard entry))
