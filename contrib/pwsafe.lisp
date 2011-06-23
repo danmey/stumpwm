@@ -2,8 +2,7 @@
 
 (in-package :stumpwm)
 
-(defcommand p () ()
-  (load-module "pwsafe2"))
+(defstruct pwsafe-entry password name user-name)
 
 (defun lines-from-string (string)
   (loop for i = 0 then (1+ j)
@@ -27,13 +26,45 @@
 (defun with-xsel (command &optional options) 
   (format nil "~a | xsel ~a" command (or options "")))
 
-(defcommand pwsafe3 (password) ((:password "Pwsafe password: "))
-  (let* ((output (run-shell-command (pwsafe-command password '("-l")) t))
-         (entries (lines-from-string output))
-         (selected-entry (select-from-menu (current-screen) entries))
-         (pwsafe-entry (car (pair-split selected-entry "  -  ")))
-         (output (run-shell-command (pwsafe-command password '("-q " "-p " "--echo " "-E ") pwsafe-entry) t))
+(defun pwsafe-entry-from-line (password line) 
+  (let ((pair (pair-split line "  -  ")))
+    (make-pwsafe-entry :password password 
+                       :name (car pair)
+                       :user-name (cdr pair))))
+         
+(defun pwsafe-entries (password)
+  (let ((output (run-shell-command (pwsafe-command password '("-l")) t)))
+         (mapcar 
+          (lambda (line) (pwsafe-entry-from-line password line)) 
+          (lines-from-string output))))
+
+(defun assoc-entries (entries)
+  (mapcar (lambda (entry) (cons (pwsafe-entry-name entry) entry)) entries))
+
+(defun pwsafe-password-to-clipboard (entry)
+  (let* ((pwsafe-entry (pwsafe-entry-name entry))
+         (output (run-shell-command (pwsafe-command (pwsafe-entry-password entry) '("-q " "-p " "--echo " "-E ") pwsafe-entry) t))
          (entry-password (cdr (pair-split output "passphrase for.*: "))))
     (set-x-selection entry-password)
-    (run-shell-command (with-xsel (format nil "echo \"~a\"" entry-password) "-b") t)))
+    (run-shell-command (with-xsel (format nil "echo \"~a\"" entry-password) "-ib") t)
+    (message (format nil "Username: ~a (password copied to clipboard)" (pwsafe-entry-user-name entry)))))
 
+(defcommand pwsafe-menu (password) ((:password "Pwsafe password: "))
+  (let* ((entries (pwsafe-entries password))
+         (entry (select-from-menu (current-screen) 
+                                  (assoc-entries entries))))
+    (pwsafe-password-to-clipboard (cdr entry))))
+                         
+(define-stumpwm-type :pwsafe-entry (input prompt)
+  (or (argument-pop input)
+      (let* ((password (read-one-line (current-screen) "Pwsafe password: " :password t))
+             (entries (pwsafe-entries password))
+             (entries-assoc (assoc-entries entries))
+             (entry-name (completing-read (current-screen)
+                         prompt
+                         entries-assoc)))
+        (cdr (assoc entry-name entries-assoc :test #'equal)))))
+             
+
+(defcommand pwsafe-pass (entry) ((:pwsafe-entry "Pwsafe entry: "))
+  (pwsafe-password-to-clipboard entry))
