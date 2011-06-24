@@ -34,16 +34,16 @@
 ;;; Not very safe since the master password is not only stored in memory 
 ;;; but also echoed through unix pipe. 
 ;;; You've been warned.
-;;; If anybody knows how to improve just mail me.
+;;; If anybody knows how to improve it just mail me or send a patch.
 
 ;;; CODE:
 
 
-(defpackage :stumpwm.contrib.pwsafe
-  (:use :common-lisp :stumpwm))
-
-(in-package :stumpwm.contrib.pwsafe)
-
+;; (defpackage :stumpwm.contrib.pwsafe
+;;   (:use :common-lisp :stumpwm)
+;;   )
+;; (in-package :stumpwm.contrib.pwsafe)
+(in-package :stumpwm)
 (defstruct pwsafe-entry
   "Our structure holding entry data. Master password stored for each
 entry therefore VERY UNSAFE."
@@ -83,17 +83,24 @@ additional ARGUMENT. Not safe."
 
 (defun pwsafe-entry-from-line (password line) 
   "Create entry from LINE and master PASSWORD. Not safe."
-  (let ((pair (pair-split line "  -  ")))
+  (let* ((line (or (cdr (pair-split line "Enter passphrase for.*:")) line))
+         (pair (pair-split line "  -  ")))
     (make-pwsafe-entry :password password 
                        :name (car pair)
                        :user-name (cdr pair))))
          
+(defun run-pwsafe-command (password options &optional argument)
+  (let ((output (run-shell-command (pwsafe-command password options argument) t)))
+    (when (cl-ppcre::scan "Passphrase is incorrect" output)
+      (throw 'error "Passphrase is incorrect"))
+    output))
+
 (defun pwsafe-entries (password)
   "Get all the entries using master PASSWORD and spawning pwsafe
 command"
-  (let ((output (run-shell-command (pwsafe-command password '("-l")) t)))
-         (mapcar 
-          (lambda (line) (pwsafe-entry-from-line password line)) 
+  (let ((output (run-pwsafe-command password '("-l"))))
+         (mapcar
+          (lambda (line) (pwsafe-entry-from-line password line))
           (lines-from-string output))))
 
 (defun assoc-entries (entries)
@@ -106,9 +113,14 @@ associated side effects like priting message and putting password into
 xclipboard"
   (let* ((pwsafe-entry (pwsafe-entry-name entry))
          (output 
-          (run-shell-command 
-           (pwsafe-command (pwsafe-entry-password entry) 
-                           '("-q " "-p " "--echo " "-E ") pwsafe-entry) t))
+          (run-pwsafe-command (pwsafe-entry-password entry) 
+                           ;; FIXME: dirty hack, attempted to be nice
+                           ;; and keep the options in list, however
+                           ;; `pwsafe-command' is not interleaving
+                           ;; them with space
+                           '("-q " "-p " "--echo " "-E ") pwsafe-entry))
+         ;; FIXME: this one is a bit buggy, it should be really not
+         ;; calling pair-split it might not work in all cases
          (entry-password (cdr (pair-split output "passphrase for.*: "))))
     (set-x-selection entry-password)
     (run-shell-command (with-xsel (format nil "echo \"~a\"" entry-password) "-ib") t)
@@ -123,21 +135,27 @@ associated username"
   (let* ((entries (pwsafe-entries password))
          (entry (select-from-menu (current-screen) 
                                   (assoc-entries entries))))
+    (unless entry
+      (throw 'error :abort))
     (pwsafe-password-to-clipboard (cdr entry))))
                          
 (define-stumpwm-type :pwsafe-entry (input prompt)
   "This is our type for prompting entry, and performing completion."
   (or (argument-pop input)
-      (let* ((password (read-one-line (current-screen) "Pwsafe password: " :password t))
-             (entries (pwsafe-entries password))
-             (entries-assoc (assoc-entries entries))
-             (entry-name (completing-read (current-screen)
-                         prompt
-                         entries-assoc)))
-        (cdr (assoc entry-name entries-assoc :test #'equal)))))
+      (let ((password (read-one-line (current-screen) "Pwsafe password: " :password t)))
+        (when password
+          (let* ((entries (pwsafe-entries password))
+                 (entries-assoc (assoc-entries entries))
+                 (entry-name (completing-read (current-screen)
+                                              prompt
+                                              entries-assoc)))
+            (cdr (assoc entry-name entries-assoc :test #'equal)))))))
              
 
 (defcommand pwsafe-entry (entry) ((:pwsafe-entry "Pwsafe entry: "))
   "Prompt for ENTRY with completion, put password in clipboard and
 notify user about associated username"
-  (pwsafe-password-to-clipboard entry))
+    (unless entry
+      (throw 'error :abort))
+    (pwsafe-password-to-clipboard entry))
+;
