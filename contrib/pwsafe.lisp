@@ -39,11 +39,12 @@
 ;;; CODE:
 
 
-;; (defpackage :stumpwm.contrib.pwsafe
-;;   (:use :common-lisp :stumpwm)
-;;   )
-;; (in-package :stumpwm.contrib.pwsafe)
-(in-package :stumpwm)
+(defpackage :stumpwm.contrib.pwsafe
+  (:use :common-lisp :stumpwm))
+
+(in-package :stumpwm.contrib.pwsafe)
+
+
 (defstruct pwsafe-entry
   "Our structure holding entry data. Master password stored for each
 entry therefore VERY UNSAFE."
@@ -158,4 +159,3 @@ notify user about associated username"
     (unless entry
       (throw 'error :abort))
     (pwsafe-password-to-clipboard entry))
-;
