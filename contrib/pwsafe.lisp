@@ -53,18 +53,10 @@ entry therefore VERY UNSAFE."
   name 
   user-name)
 
-(defun command-options (options &optional argument) 
-  "Create command OPTIONS with optional ARGUMENTS.  BUGS: Need to
-insert space after each switch, should interleave space."
-  (format nil "~a ~a" 
-          (if (listp options) 
-              (apply #'concat options) options) 
-          (or argument "") t))
-
-(defun pwsafe-command (password options &optional argument) 
+(defun pwsafe-command (password options) 
   "Execute pwsafe command using master PASSWORD with OPTIONS and
 additional ARGUMENT. Not safe."
-  (format nil "echo \"~a\" | pwsafe ~a" password (command-options options argument)))
+  (format nil "echo \"~a\" | pwsafe ~a" password (concat options)))
 
 (defun with-xsel (command &optional options)
   "Pipe COMMAND with OPTIONS to xsel."
@@ -78,8 +70,9 @@ additional ARGUMENT. Not safe."
                        :name (car pair)
                        :user-name (cadr pair))))
          
-(defun run-pwsafe-command (password options &optional argument)
-  (let ((output (run-shell-command (pwsafe-command password options argument) t)))
+(defun run-pwsafe-command (password &rest options)
+  (let* ((command (format nil "echo \"~a\" | pwsafe ~a" password (apply #'concat options)))
+         (output (run-shell-command command t)))
     (when (cl-ppcre::scan "Passphrase is incorrect" output)
       (throw 'error "Passphrase is incorrect"))
     output))
@@ -87,7 +80,7 @@ additional ARGUMENT. Not safe."
 (defun pwsafe-entries (password)
   "Get all the entries using master PASSWORD and spawning pwsafe
 command"
-  (let ((output (run-pwsafe-command password '("-l"))))
+  (let ((output (run-pwsafe-command password "-l")))
          (mapcar
           (lambda (line) (pwsafe-entry-from-line password line))
           (split-string output '(#\Newline)))))
@@ -107,7 +100,7 @@ xclipboard"
                            ;; and keep the options in list, however
                            ;; `pwsafe-command' is not interleaving
                            ;; them with space
-                           '("-q " "-p " "--echo " "-E ") pwsafe-entry))
+                           "-q " "-p " "--echo " "-E " pwsafe-entry))
          ;; FIXME: this one is a bit buggy, it should be really not
          ;; calling cl-ppcre:split it might not work in all cases
          (entry-password (cadr (cl-ppcre:split "passphrase for.*: " output))))
