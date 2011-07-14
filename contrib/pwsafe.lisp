@@ -39,10 +39,11 @@
 ;;; CODE:
 
 
-(defpackage :stumpwm.contrib.pwsafe
-  (:use :common-lisp :stumpwm))
+;; (defpackage :stumpwm.contrib.pwsafe
+;;   (:use :common-lisp :stumpwm))
 
-(in-package :stumpwm.contrib.pwsafe)
+;; (in-package :stumpwm.contrib.pwsafe)
+(in-package :stumpwm)
 
 
 (defstruct pwsafe-entry
@@ -51,19 +52,6 @@ entry therefore VERY UNSAFE."
   password 
   name 
   user-name)
-
-(defun lines-from-string (string)
-  "Boiler plate for splitting STRING buffer to lines.  Rewritten
-thousands of times already"
-  (loop for i = 0 then (1+ j)
-        as j = (position #\Newline string :start i)
-        collect (subseq string i j)
-        while j))
-
-(defun pair-split (entry separator)
-  "Split two ENTRY sections separated by SEPARATOR into pair"
-  (let ((lst (cl-ppcre:split separator entry)))
-    (cons (remove #\Newline (car lst)) (remove #\Newline (cadr lst)))))
 
 (defun command-options (options &optional argument) 
   "Create command OPTIONS with optional ARGUMENTS.  BUGS: Need to
@@ -84,11 +72,11 @@ additional ARGUMENT. Not safe."
 
 (defun pwsafe-entry-from-line (password line) 
   "Create entry from LINE and master PASSWORD. Not safe."
-  (let* ((line (or (cdr (pair-split line "Enter passphrase for.*:")) line))
-         (pair (pair-split line "  -  ")))
+  (let* ((line (or (cadr (cl-ppcre:split "Enter passphrase for.*:" line)) line))
+         (pair (cl-ppcre:split "  -  " line)))
     (make-pwsafe-entry :password password 
                        :name (car pair)
-                       :user-name (cdr pair))))
+                       :user-name (cadr pair))))
          
 (defun run-pwsafe-command (password options &optional argument)
   (let ((output (run-shell-command (pwsafe-command password options argument) t)))
@@ -102,7 +90,7 @@ command"
   (let ((output (run-pwsafe-command password '("-l"))))
          (mapcar
           (lambda (line) (pwsafe-entry-from-line password line))
-          (lines-from-string output))))
+          (split-string output '(#\Newline)))))
 
 (defun assoc-entries (entries)
   "Create assoc from ENTRIES keyed by the name"
@@ -121,8 +109,8 @@ xclipboard"
                            ;; them with space
                            '("-q " "-p " "--echo " "-E ") pwsafe-entry))
          ;; FIXME: this one is a bit buggy, it should be really not
-         ;; calling pair-split it might not work in all cases
-         (entry-password (cdr (pair-split output "passphrase for.*: "))))
+         ;; calling cl-ppcre:split it might not work in all cases
+         (entry-password (cadr (cl-ppcre:split "passphrase for.*: " output))))
     (set-x-selection entry-password)
     (run-shell-command (with-xsel (format nil "echo \"~a\"" entry-password) "-ib") t)
     (message 
