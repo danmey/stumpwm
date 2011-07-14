@@ -53,14 +53,18 @@ entry therefore VERY UNSAFE."
   name 
   user-name)
 
+(defun esc-str (str)
+  "Quote STR"
+  (format nil "\"~a\"" str))
+
 (defun pwsafe-command (password options) 
   "Execute pwsafe command using master PASSWORD with OPTIONS and
 additional ARGUMENT. Not safe."
-  (format nil "echo \"~a\" | pwsafe ~a" password (concat options)))
+  (format nil "echo ~a | pwsafe ~a" (esc-str password) (concat options)))
 
-(defun with-xsel (command &optional options)
+(defun with-xsel (command &optional (options ""))
   "Pipe COMMAND with OPTIONS to xsel."
-  (format nil "~a | xsel ~a" command (or options "")))
+  (format nil "~a | xsel ~a" command (esc-str options) ""))
 
 (defun pwsafe-entry-from-line (password line) 
   "Create entry from LINE and master PASSWORD. Not safe."
@@ -71,7 +75,7 @@ additional ARGUMENT. Not safe."
                        :user-name (cadr pair))))
          
 (defun run-pwsafe-command (password &rest options)
-  (let* ((command (format nil "echo \"~a\" | pwsafe ~a" password (apply #'concat options)))
+  (let* ((command (format nil "echo ~a | pwsafe ~a 2>&1" (esc-str password) (apply #'concat options)))
          (output (run-shell-command command t)))
     (when (cl-ppcre::scan "Passphrase is incorrect" output)
       (throw 'error "Passphrase is incorrect"))
@@ -82,12 +86,10 @@ additional ARGUMENT. Not safe."
 command"
   (let ((output (run-pwsafe-command password "-l")))
          (mapcar
-          (lambda (line) (pwsafe-entry-from-line password line))
+          (lambda (line) 
+            (let ((entry (pwsafe-entry-from-line password line)))
+              (cons (pwsafe-entry-name entry) entry)))
           (split-string output '(#\Newline)))))
-
-(defun assoc-entries (entries)
-  "Create assoc from ENTRIES keyed by the name"
-  (mapcar (lambda (entry) (cons (pwsafe-entry-name entry) entry)) entries))
 
 (defun pwsafe-password-to-clipboard (entry)
   "Main function that will perform side action on ENTRY with all the
@@ -106,9 +108,7 @@ xclipboard"
          (entry-password (cadr (cl-ppcre:split "passphrase for.*: " output))))
     (set-x-selection entry-password)
     (run-shell-command (with-xsel (format nil "echo \"~a\"" entry-password) "-ib") t)
-    (message 
-     (format nil "Username: ~a (password copied to clipboard)" 
-             (pwsafe-entry-user-name entry)))))
+    (message "Username: ~a (password copied to clipboard)" (pwsafe-entry-user-name entry))))
 
 (defcommand pwsafe-menu (password) ((:password "Pwsafe password: "))
   "Prompt for PASSWORD. Show menu with pwsafe database entries. Let
@@ -116,7 +116,7 @@ the user choose entry, put password to clipboard and notify user about
 associated username"
   (let* ((entries (pwsafe-entries password))
          (entry (select-from-menu (current-screen) 
-                                  (assoc-entries entries))))
+                                  entries)))
     (unless entry
       (throw 'error :abort))
     (pwsafe-password-to-clipboard (cdr entry))))
@@ -127,13 +127,11 @@ associated username"
       (let ((password (read-one-line (current-screen) "Pwsafe password: " :password t)))
         (when password
           (let* ((entries (pwsafe-entries password))
-                 (entries-assoc (assoc-entries entries))
                  (entry-name (completing-read (current-screen)
                                               prompt
-                                              entries-assoc)))
-            (cdr (assoc entry-name entries-assoc :test #'equal)))))))
+                                              entries)))
+            (cdr (assoc entry-name entries :test #'equal)))))))
              
-
 (defcommand pwsafe-entry (entry) ((:pwsafe-entry "Pwsafe entry: "))
   "Prompt for ENTRY with completion, put password in clipboard and
 notify user about associated username"
